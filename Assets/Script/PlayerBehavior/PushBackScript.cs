@@ -43,11 +43,11 @@ public class PushBackScript : MonoBehaviour
     {
         if (AnDanBenPhai == true)
         {
-            myRigidbody.velocity = new Vector2(-BomForce, ShotForce);
+            myRigidbody.linearVelocity = new Vector2(-BomForce, ShotForce);
         }
         if (AnDanBenPhai == false)
         {
-            myRigidbody.velocity = new Vector2(BomForce, ShotForce);
+            myRigidbody.linearVelocity = new Vector2(BomForce, ShotForce);
         }
     }
 
@@ -99,7 +99,9 @@ public class PushBackScript : MonoBehaviour
             }
 
         }
-        if (collision.gameObject.CompareTag("SlashLine"))
+        // Đạn bắn tỉa: trước đây dùng chung tag "PistolBullet" nên không phân biệt được
+        // với súng lục. Nay có tag riêng "SniperBullet"; lực đẩy tạm giữ nguyên như cũ.
+        if (collision.gameObject.CompareTag("SniperBullet"))
         {
             //Kích hoạt hàm bật lùi của người chơi
             ShotForceTimeCounter = ShotForceTotalTime;

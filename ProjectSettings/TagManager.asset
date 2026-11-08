@@ -7,6 +7,12 @@ TagManager:
   - Enemy
   - Ground
   - Object
+  - SecondGround
+  - PistolBullet
+  - SniperBullet
+  - SlashLine
+  - bomno
+  - Bomb
   layers:
   - Default
   - TransparentFX

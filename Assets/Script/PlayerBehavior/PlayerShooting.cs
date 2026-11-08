@@ -43,13 +43,101 @@ public class PlayerShooting : NetworkBehaviour
     [ServerRpc]
     private void ShootServerRpc()
     {
-        // Chỉ server mới tạo và đồng bộ hóa viên đạn
-        Debug.Log("Goi chuyen animation tan cong");
-        ShootClientRpc();
+        // Animation là hiệu ứng hình ảnh -> phát trên mọi máy.
+        PlayShootAnimationClientRpc();
+
+        // Viên đạn là đối tượng mạng -> CHỈ server tạo, rồi Spawn() cho mọi máy.
+        SpawnBulletOnServer();
+    }
+
+    /// <summary>
+    /// Tạo đạn trên server rồi spawn qua mạng.
+    ///
+    /// Bản cũ gọi Instantiate() ngay trong ShootClientRpc, nghĩa là MỖI MÁY tự
+    /// sinh một viên đạn riêng rồi tự mô phỏng vật lý. Hai máy không bao giờ
+    /// thống nhất được viên đạn đang ở đâu.
+    ///
+    /// Bốn prefab đạn đều đã có NetworkObject và đã đăng ký trong
+    /// Assets/DefaultNetworkPrefabs.asset nên Spawn() dùng được ngay.
+    /// </summary>
+    private void SpawnBulletOnServer()
+    {
+        if (!IsServer)
+        {
+            return;
+        }
+
+        if (bulletPrefab == null || firePoint == null)
+        {
+            Debug.LogError("[PlayerShooting] Chưa gán bulletPrefab hoặc không tìm thấy firePoint.");
+            return;
+        }
+
+        GameObject newBullet = Instantiate(
+            bulletPrefab, firePoint.transform.position, firePoint.transform.rotation);
+
+        var bulletNetworkObject = newBullet.GetComponent<NetworkObject>();
+        if (bulletNetworkObject == null)
+        {
+            Debug.LogError("[PlayerShooting] Prefab đạn '" + bulletPrefab.name +
+                           "' không có NetworkObject. Huỷ viên đạn này.");
+            Destroy(newBullet);
+            return;
+        }
+
+        // Spawn trước, rồi mới set vận tốc, để trạng thái ban đầu kịp đi kèm gói spawn.
+        bulletNetworkObject.Spawn(true);
+
+        Rigidbody2D bulletRigidbody = newBullet.GetComponent<Rigidbody2D>();
+        if (bulletRigidbody != null)
+        {
+            bulletRigidbody.linearVelocity = transform.right * bulletSpeed;
+        }
+
+        // Không cho đạn va vào chính người bắn. Phải làm trên mọi máy vì vật lý
+        // được mô phỏng cục bộ ở từng máy, nên gửi kèm một ClientRpc.
+        IgnoreShooterCollision(newBullet);
+        IgnoreShooterCollisionClientRpc(bulletNetworkObject.NetworkObjectId);
     }
 
     [ClientRpc]
-    private void ShootClientRpc()
+    private void IgnoreShooterCollisionClientRpc(ulong bulletNetworkObjectId)
+    {
+        if (IsServer)
+        {
+            return; // server đã làm rồi
+        }
+
+        NetworkManager nm = NetworkManager.Singleton;
+        if (nm == null || nm.SpawnManager == null)
+        {
+            return;
+        }
+
+        if (nm.SpawnManager.SpawnedObjects.TryGetValue(bulletNetworkObjectId, out NetworkObject bullet))
+        {
+            IgnoreShooterCollision(bullet.gameObject);
+        }
+    }
+
+    private void IgnoreShooterCollision(GameObject bullet)
+    {
+        if (bullet == null)
+        {
+            return;
+        }
+
+        Collider2D shooterCollider = GetComponent<Collider2D>();
+        Collider2D bulletCollider = bullet.GetComponent<Collider2D>();
+
+        if (shooterCollider != null && bulletCollider != null)
+        {
+            Physics2D.IgnoreCollision(shooterCollider, bulletCollider, true);
+        }
+    }
+
+    [ClientRpc]
+    private void PlayShootAnimationClientRpc()
     {
         if (gameObject.name.Contains("Cowboy"))
         {
@@ -75,14 +163,9 @@ public class PlayerShooting : NetworkBehaviour
             StartCoroutine(PlayAnimationAndWait("Slash"));
         }
 
-        GameObject newBullet = Instantiate(bulletPrefab, firePoint.transform.position, firePoint.transform.rotation);
-        Physics2D.IgnoreCollision(GetComponent<Collider2D>(), newBullet.GetComponent<Collider2D>(), true);
-
-        Rigidbody2D bulletRigidbody = newBullet.GetComponent<Rigidbody2D>();
-        if (bulletRigidbody != null)
-        {
-            bulletRigidbody.velocity = transform.right * bulletSpeed;
-        }
+        // Việc sinh đạn ĐÃ CHUYỂN sang SpawnBulletOnServer().
+        // Trước đây Instantiate() nằm ở đây, ngoài mọi nhánh if, nên mỗi máy
+        // tự tạo một viên đạn cục bộ và vị trí không bao giờ khớp nhau.
     }
 
     private IEnumerator PlayAnimationAndWait(string animName)
@@ -105,21 +188,21 @@ public class PlayerShooting : NetworkBehaviour
 
     void SetStateAnimation()
     {
-        if (myRigidbody.velocity.y > 1)
+        if (myRigidbody.linearVelocity.y > 1)
         {
             shootAnimator.SetBool("JumpState", true);
             shootAnimator.SetBool("FallingState", false);
             shootAnimator.SetBool("Walking", false);
             shootAnimator.SetBool("Standing", false);
         }
-        else if (myRigidbody.velocity.y < -1)
+        else if (myRigidbody.linearVelocity.y < -1)
         {
             shootAnimator.SetBool("JumpState", false);
             shootAnimator.SetBool("FallingState", true);
             shootAnimator.SetBool("Walking", false);
             shootAnimator.SetBool("Standing", false);
         }
-        else if (myRigidbody.velocity.x != 0)
+        else if (myRigidbody.linearVelocity.x != 0)
         {
             shootAnimator.SetBool("JumpState", false);
             shootAnimator.SetBool("FallingState", false);

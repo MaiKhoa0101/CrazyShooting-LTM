@@ -17,7 +17,7 @@ public class BulletSniper : MonoBehaviour
         bulletBody = GetComponent<Rigidbody2D>();
 
         // Store the initial velocity to ensure it stays constant
-        initialVelocity = bulletBody.velocity;
+        initialVelocity = bulletBody.linearVelocity;
 
         timeCount = 0;
         timeLife = 4f;
@@ -27,11 +27,12 @@ public class BulletSniper : MonoBehaviour
     void Update()
     {
         // Keep the bullet's velocity constant
-        bulletBody.velocity = initialVelocity;
+        bulletBody.linearVelocity = initialVelocity;
 
         if (timeCount > timeLife)
         {
-            Destroy(gameObject);
+            // Đạn nay là NetworkObject do server spawn -> chỉ server được huỷ.
+            NetworkSession.DespawnOrDestroy(gameObject);
         }
         timeCount += Time.deltaTime;
     }
@@ -46,7 +47,7 @@ public class BulletSniper : MonoBehaviour
         if (collision.gameObject.CompareTag("Player"))
         {
             // Ignore deceleration after hitting the player by resetting the velocity
-            bulletBody.velocity = initialVelocity;
+            bulletBody.linearVelocity = initialVelocity;
         }
     }
 }

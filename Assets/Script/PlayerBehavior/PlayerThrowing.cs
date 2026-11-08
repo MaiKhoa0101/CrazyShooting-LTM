@@ -41,7 +41,7 @@ public class PlayerThrowing : MonoBehaviour
         Rigidbody2D grenadeRigidbody = newGrenade.GetComponent<Rigidbody2D>();
         if (grenadeRigidbody != null)
         {// Hướng ném thẳng phía trước
-            grenadeRigidbody.velocity = transform.right * 100f + transform.up * 50f;
+            grenadeRigidbody.linearVelocity = transform.right * 100f + transform.up * 50f;
 
         }
     }

@@ -82,6 +82,11 @@ public class SetCharacter : MonoBehaviour
     // Remove the listener when the object is destroyed
     private void OnDestroy()
     {
+        // Phải huỷ cả đăng ký sceneLoaded, không chỉ listener của InputField.
+        // Thiếu dòng này thì mỗi lần đổi scene lại để sót một handler chết,
+        // số handler tăng dần theo từng vòng chơi lại.
+        SceneManager.sceneLoaded -= OnSceneLoaded;
+
         if (NamePlayer != null)
         {
             NamePlayer.onValueChanged.RemoveListener(OnValueChanged);

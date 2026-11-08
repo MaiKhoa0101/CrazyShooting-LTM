@@ -89,7 +89,8 @@ public class CharacterSelection : MonoBehaviour
     // Function to return to the main menu (optional)
     public void ReturnToMenu()
     {
-        Time.timeScale = 1f; // Resume time if it was paused
-        SceneManager.LoadScene("MainMenu"); // Load the main menu scene
+        // Người chơi có thể đã bấm StartHost/StartClient rồi mới quay ra,
+        // nên phải tắt phiên mạng cho sạch thay vì chỉ đổi scene.
+        NetworkSession.LeaveAndLoad("MainMenu");
     }
 }

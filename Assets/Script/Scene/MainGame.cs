@@ -10,6 +10,19 @@ public class MainGame : MonoBehaviour
 
     private void Start()
     {
+        if (rolePanel == null)
+        {
+            return;
+        }
+
+        // Không có phiên mạng (mở thẳng scene MainGame trong Editor để thử)
+        // thì Singleton là null và bản cũ sẽ ném NullReferenceException ngay đây.
+        if (NetworkManager.Singleton == null)
+        {
+            rolePanel.SetActive(false);
+            return;
+        }
+
         // Kiểm tra xem người chơi có phải là host không
         if (NetworkManager.Singleton.IsHost)
         {
@@ -31,9 +44,14 @@ public class MainGame : MonoBehaviour
         rolePanel.SetActive(false); // Ẩn panel sau delay
     }
 
+    /// <summary>
+    /// Thoát trận giữa chừng. Hiện CHƯA có nút nào trong MainGame.unity gọi hàm này
+    /// (quét toàn scene không có m_PersistentCalls nào) — Human cần thêm nút trong
+    /// Inspector và trỏ onClick vào đây.
+    /// Host bấm thì cả phòng bị ngắt; client bấm thì chỉ mình rời đi.
+    /// </summary>
     public void ReturnToMenu()
     {
-        Time.timeScale = 1f; // Resume time if it was paused
-        SceneManager.LoadScene("SelectCharacter"); // Load the main menu scene
+        NetworkSession.LeaveAndLoad("SelectCharacter");
     }
 }

@@ -38,6 +38,14 @@ public class GameNetworkManager : MonoBehaviour
 
     }
 
+    private void OnDestroy()
+    {
+        // BẮT BUỘC huỷ đăng ký. Nếu không, mỗi lần rời trận rồi vào lại sẽ còn
+        // lại một handler của đối tượng đã bị huỷ, và lần nạp MainGame sau sẽ
+        // chạy SpawnPlayer nhiều lần -> người chơi bị spawn trùng.
+        SceneManager.sceneLoaded -= OnSceneLoaded;
+    }
+
 
 
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)

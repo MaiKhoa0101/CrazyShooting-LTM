@@ -10,6 +10,12 @@ public class SetName : NetworkBehaviour
     private NetworkVariable<FixedString128Bytes> playerNameNetVariable = new NetworkVariable<FixedString128Bytes>();
     public TMP_Text nameDisplay;
 
+    /// <summary>
+    /// Tên người chơi đã đồng bộ qua mạng. Trả về chuỗi rỗng nếu chưa kịp gán.
+    /// MatchManager đọc giá trị này trên server để xác định tên người thắng.
+    /// </summary>
+    public string PlayerName => playerNameNetVariable.Value.ToString();
+
     public override void OnNetworkSpawn()
     {
         if (IsHost)

@@ -30,6 +30,14 @@ public class MovingScripts : NetworkBehaviour
     private float timeCountJump; // Đếm ngược thời gian nhảy
     private Animator animator;
     public NetworkVariable<int> life_count = new NetworkVariable<int>(3);
+
+    // Chặn việc báo rơi nhiều khung hình liên tiếp cho cùng một lần rơi.
+    // Chỉ owner dùng; được mở lại khi server xác nhận hồi sinh.
+    private bool fallReported;
+
+    /// <summary>Người chơi còn mạng hay không. MatchManager đọc trên server để tìm người thắng.</summary>
+    public bool IsAlive => life_count.Value > 0;
+
     public override void OnNetworkSpawn()
     {
         animator = GetComponent<Animator>();
@@ -62,6 +70,13 @@ public class MovingScripts : NetworkBehaviour
 
         maxHorizontalSpeed = 40; // Giới hạn tốc độ di chuyển theo trục X|XXXXXXXXXXXXX( QUAN TRỌNG )XXXXXXXXXXXXXXXX
 
+        // Báo trọng tài biết trận này có thêm một người chơi. Cần cho trường hợp
+        // có người rời phòng giữa chừng: lúc đó đối tượng của họ đã bị despawn
+        // nên không đếm lại được nữa.
+        if (IsServer && MatchManager.Instance != null)
+        {
+            MatchManager.Instance.NotifyPlayerSpawned();
+        }
     }
 
 
@@ -69,49 +84,133 @@ public class MovingScripts : NetworkBehaviour
     {
         if (IsOwner)
         {
+            // Hết mạng thì không điều khiển được nữa, cũng không báo rơi thêm lần nào.
+            if (!IsAlive)
+            {
+                return;
+            }
+
             CharacterMoving();
             CharacterJumping();
             CharacterFalling();
             SetStateAnimation();
 
-            if (this.transform.position.y < -90)
+            // Owner chỉ BÁO rơi, không tự quyết định mất mạng hay chết.
+            // Server mới là trọng tài: nó trừ mạng rồi bảo lại phải làm gì.
+            if (!fallReported && this.transform.position.y < -90)
             {
-                // The client calls the server to update the life count
-                UpdateLifeCountServerRpc();
-
-                if (life_count.Value > 0)
-                {
-                    // Reset position and velocity
-                    this.transform.position = new Vector3(0, 180, 0);
-                    myRigidbody.velocity = Vector3.zero;
-                }
-                else if (IsServer)
-                {
-                    GameObject thongbaochet = Instantiate(Thongbaochet, new Vector3(150,100,10), Quaternion.identity);
-                    thongbaochet.GetComponentInChildren<TMP_Text>().text = this.name + " đã thua";
-                }
-                else
-                {
-                    GameObject thongbaochet = Instantiate(Thongbaochet, new Vector3(0,0,0), Quaternion.identity);
-                    thongbaochet.GetComponentInChildren<TMP_Text>().text = this.name + " đã thua";
-                    // Destroy the player object on the server
-                    Destroy(gameObject);
-                }
+                fallReported = true;
+                ReportFallServerRpc();
             }
         }
 
     }
+
+    // ---------------------------------------------------------------------
+    // Vòng đời mất mạng / hồi sinh / chết — server là nơi quyết định.
+    // ---------------------------------------------------------------------
+
     [ServerRpc(RequireOwnership = false)]
-    void UpdateLifeCountServerRpc()
+    void ReportFallServerRpc()
     {
-        life_count.Value -= 1;  // Only the server can change the life count
+        // Đã hết mạng từ trước thì bỏ qua, tránh trừ âm.
+        if (life_count.Value <= 0)
+        {
+            return;
+        }
+
+        life_count.Value -= 1;
+
+        if (life_count.Value > 0)
+        {
+            RespawnClientRpc();
+            return;
+        }
+
+        // Hết mạng: báo cho mọi máy rồi hỏi trọng tài xem trận đã xong chưa.
+        AnnounceDeathClientRpc(ResolveDisplayName());
+
+        if (MatchManager.Instance != null)
+        {
+            MatchManager.Instance.OnPlayerDied();
+        }
+        else
+        {
+            Debug.LogError("[MovingScripts] Không tìm thấy MatchManager nên trận không thể kết thúc. " +
+                           "Hãy gắn component MatchManager lên prefab " +
+                           "Assets/Sprite/Player/Prefab/Player.prefab.");
+        }
+    }
+
+    [ClientRpc]
+    void RespawnClientRpc()
+    {
+        // Mở lại chốt để lần rơi sau còn báo được.
+        fallReported = false;
+
+        if (IsOwner)
+        {
+            this.transform.position = new Vector3(0, 180, 0);
+            if (myRigidbody != null)
+            {
+                myRigidbody.linearVelocity = Vector2.zero;
+            }
+        }
+    }
+
+    [ClientRpc]
+    void AnnounceDeathClientRpc(string deadName)
+    {
+        ShowDeathBanner(deadName);
+    }
+
+    /// <summary>
+    /// Hiện bảng "đã thua" ở GIỮA MÀN HÌNH trên MỌI máy.
+    /// Bản cũ đặt bảng ở hai toạ độ khác nhau cho server và client, và còn
+    /// gọi Destroy(gameObject) lên một NetworkObject phía client — việc mà
+    /// Netcode không cho phép và làm hai máy lệch trạng thái.
+    /// </summary>
+    private void ShowDeathBanner(string deadName)
+    {
+        if (Thongbaochet == null)
+        {
+            return;
+        }
+
+        // Canvas của prefab này ở chế độ World Space nên vị trí có ý nghĩa.
+        // Đặt ngay trước camera để mọi máy đều thấy ở giữa màn hình.
+        Vector3 bannerPosition = Vector3.zero;
+        Camera cam = Camera.main;
+        if (cam != null)
+        {
+            bannerPosition = cam.transform.position + cam.transform.forward * 10f;
+        }
+
+        GameObject banner = Instantiate(Thongbaochet, bannerPosition, Quaternion.identity);
+
+        TMP_Text text = banner.GetComponentInChildren<TMP_Text>();
+        if (text != null)
+        {
+            text.text = deadName + " đã thua";
+        }
+    }
+
+    /// <summary>Tên hiển thị của người chơi này, ưu tiên tên đã đồng bộ qua mạng.</summary>
+    private string ResolveDisplayName()
+    {
+        var setName = GetComponent<SetName>();
+        if (setName != null && !string.IsNullOrWhiteSpace(setName.PlayerName))
+        {
+            return setName.PlayerName;
+        }
+        return this.name;
     }
 
 
     void SetStateAnimation()
     {
 
-        if (myRigidbody.velocity.y > 1)
+        if (myRigidbody.linearVelocity.y > 1)
         {
 
             animator.SetBool("JumpState", true);
@@ -119,7 +218,7 @@ public class MovingScripts : NetworkBehaviour
             animator.SetBool("Walking", false);
             animator.SetBool("Standing", false);
         }
-        else if (myRigidbody.velocity.y < -1)
+        else if (myRigidbody.linearVelocity.y < -1)
         {
 
             animator.SetBool("JumpState", false);
@@ -127,7 +226,7 @@ public class MovingScripts : NetworkBehaviour
             animator.SetBool("Walking", false);
             animator.SetBool("Standing", false);
         }
-        else if (myRigidbody.velocity.x>20 || myRigidbody.velocity.x<-20 )
+        else if (myRigidbody.linearVelocity.x>20 || myRigidbody.linearVelocity.x<-20 )
         {
 
             animator.SetBool("JumpState", false);
@@ -149,10 +248,10 @@ public class MovingScripts : NetworkBehaviour
     private void CharacterJumping()
     {
         // Kiểm tra nếu nhấn phím W và nhân vật còn số lần nhảy
-        if (Input.GetKeyDown(KeyCode.W) && jumpCount > 0 && myRigidbody.velocity.y > -40)
+        if (Input.GetKeyDown(KeyCode.W) && jumpCount > 0 && myRigidbody.linearVelocity.y > -40)
         {
             // Tạo vận tốc nhảy lên
-            myRigidbody.velocity = new Vector2(myRigidbody.velocity.x, upwardForce);
+            myRigidbody.linearVelocity = new Vector2(myRigidbody.linearVelocity.x, upwardForce);
             jumpCount--; // Giảm số lần nhảy sau khi thực hiện
             timeCountJump = 0.2f;
         }
@@ -166,7 +265,7 @@ public class MovingScripts : NetworkBehaviour
         if (Input.GetKeyDown(KeyCode.S))
         {
             // Tăng tốc độ rơi xuống và bỏ qua va chạm với "SecondGround"
-            myRigidbody.velocity = new Vector2(myRigidbody.velocity.x, -upwardForce);
+            myRigidbody.linearVelocity = new Vector2(myRigidbody.linearVelocity.x, -upwardForce);
             foreach (var collider in secondGroundColliders)
             {
                 Physics2D.IgnoreCollision(collider, this.GetComponent<Collider2D>(), true);
@@ -176,9 +275,9 @@ public class MovingScripts : NetworkBehaviour
         }
 
         // Tăng tốc độ rơi khi vận tốc y lớn hơn -50
-        if (myRigidbody.velocity.y < -50)
+        if (myRigidbody.linearVelocity.y < -50)
         {
-            myRigidbody.velocity -= vecGravity * tocdoroi * Time.deltaTime;
+            myRigidbody.linearVelocity -= vecGravity * tocdoroi * Time.deltaTime;
         }
     }
 
@@ -197,7 +296,7 @@ public class MovingScripts : NetworkBehaviour
 
     private void CharacterMoving()
     {
-        float horizontalVelocity = myRigidbody.velocity.x;
+        float horizontalVelocity = myRigidbody.linearVelocity.x;
         if (Input.GetKey(KeyCode.A)|| Input.GetKey(KeyCode.D)){
             
 
@@ -229,7 +328,7 @@ public class MovingScripts : NetworkBehaviour
             horizontalVelocity = Mathf.Clamp(horizontalVelocity, -maxHorizontalSpeed, maxHorizontalSpeed);
 
             // Gán vận tốc mới cho Rigidbody
-            myRigidbody.velocity = new Vector2(horizontalVelocity, myRigidbody.velocity.y);
+            myRigidbody.linearVelocity = new Vector2(horizontalVelocity, myRigidbody.linearVelocity.y);
         }
 
 
@@ -240,7 +339,7 @@ public class MovingScripts : NetworkBehaviour
         // Kiểm tra nếu va chạm với mặt đất "BaseGround" hoặc "SecondGround"
         if (collision.gameObject.name == "BaseGround" || collision.gameObject.name == "SecondGround")
         {
-            if (myRigidbody.velocity.y < 1 && myRigidbody.velocity.y > -1)
+            if (myRigidbody.linearVelocity.y < 1 && myRigidbody.linearVelocity.y > -1)
             {
                 // Reset số lần nhảy khi chạm đất
                 jumpCount = 2;

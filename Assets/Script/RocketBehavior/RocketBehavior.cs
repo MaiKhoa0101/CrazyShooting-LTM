@@ -49,7 +49,7 @@ public class RocketBehavior : MonoBehaviour
 
     void Dropping()
     {
-        rbbody.velocity = new Vector2(rbbody.velocity.x, -200);
+        rbbody.linearVelocity = new Vector2(rbbody.linearVelocity.x, -200);
     }
     private void OnCollisionEnter2D(Collision2D collision)
     {

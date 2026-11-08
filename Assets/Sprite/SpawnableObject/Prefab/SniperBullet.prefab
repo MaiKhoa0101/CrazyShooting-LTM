@@ -18,7 +18,7 @@ GameObject:
   - component: {fileID: 5846513451556557859}
   m_Layer: 0
   m_Name: SniperBullet
-  m_TagString: PistolBullet
+  m_TagString: SniperBullet
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0

@@ -28,7 +28,8 @@ public class SlashingLine : MonoBehaviour
         // Kiểm tra thời gian sống của viên đạn
         if (timeCount > timeLife)
         {
-            Destroy(gameObject); // Hủy viên đạn khi hết thời gian
+            // Vệt chém nay là NetworkObject do server spawn -> chỉ server được huỷ.
+            NetworkSession.DespawnOrDestroy(gameObject);
         }
         timeCount += Time.deltaTime; // Cập nhật thời gian sống
 

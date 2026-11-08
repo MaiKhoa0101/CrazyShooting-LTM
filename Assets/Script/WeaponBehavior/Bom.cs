@@ -49,7 +49,7 @@ public class Bom : NetworkBehaviour
 
         if (collision.gameObject.CompareTag("Ground") && !hasExploded && isReadyToBounce)
         {
-            bombRigidbody.velocity = new Vector2(bombRigidbody.velocity.x * 0.5f, bounceForce);
+            bombRigidbody.linearVelocity = new Vector2(bombRigidbody.linearVelocity.x * 0.5f, bounceForce);
             StartCoroutine(BounceCooldown());
         }
     }
@@ -68,11 +68,16 @@ public class Bom : NetworkBehaviour
 
             if (explosionEffectPrefab != null)
             {
+                // Hiệu ứng nổ cố ý để CỤC BỘ trên từng máy (không Spawn qua mạng),
+                // vì đúng cái va chạm cục bộ đó mới kích hoạt được PushBackScript
+                // của người chơi trên chính máy họ. Nó chưa từng được Spawn nên
+                // Destroy thẳng là hợp lệ.
                 GameObject explosionEffect = Instantiate(explosionEffectPrefab, this.transform.position, Quaternion.identity);
                 Destroy(explosionEffect, 0.2f);
             }
 
-            Destroy(gameObject);
+            // Quả bom thì là NetworkObject do server spawn -> chỉ server được huỷ.
+            NetworkSession.DespawnOrDestroy(gameObject);
         }
     }
 

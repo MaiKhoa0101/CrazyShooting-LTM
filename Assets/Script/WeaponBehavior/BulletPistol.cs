@@ -28,7 +28,8 @@ public class BulletPistol : MonoBehaviour
         // Kiểm tra thời gian sống của viên đạn
         if (timeCount > timeLife)
         {
-            Destroy(gameObject); // Hủy viên đạn khi hết thời gian
+            // Đạn nay là NetworkObject do server spawn -> chỉ server được huỷ.
+            NetworkSession.DespawnOrDestroy(gameObject);
         }
         timeCount += Time.deltaTime; // Cập nhật thời gian sống
     }
@@ -40,7 +41,7 @@ public class BulletPistol : MonoBehaviour
         if (collision.gameObject.CompareTag("Player"))
         {
             StartCoroutine(WaitAndExecute());
-            Destroy(gameObject); // Hủy viên đạn sau khi va chạm
+            NetworkSession.DespawnOrDestroy(gameObject); // Hủy viên đạn sau khi va chạm
         }
     }
 

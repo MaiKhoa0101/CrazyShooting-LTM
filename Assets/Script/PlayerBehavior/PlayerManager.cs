@@ -21,25 +21,37 @@ public class PlayerManager : NetworkBehaviour
         
     }
 
-        // Server RPC to set the player character on the server
-        [ServerRpc(RequireOwnership = false)]
+    // Server RPC to set the player character on the server
+    [ServerRpc(RequireOwnership = false)]
     private void SetPlayerCharacterServerRpc(string playerChar, ServerRpcParams rpcParams = default)
     {
         Debug.Log("Setting character on server: " + playerChar);
         playerCharNetVariable.Value = playerChar; // Store the character selection in the network variable
 
-        
-        // After setting, spawn the player for the client that owns this character
-        SpawnPlayerClientRpc(playerChar, rpcParams.Receive.SenderClientId);
+        // Spawn luôn tại đây, trên server.
+        SpawnPlayerForClient(playerChar, rpcParams.Receive.SenderClientId);
     }
-    [ClientRpc]
-    // Method to spawn the player object based on character selection
-    private void SpawnPlayerClientRpc(string selectedCharacter, ulong clientId)
+
+    /// <summary>
+    /// Tạo nhân vật và giao quyền sở hữu cho client đã yêu cầu. CHỈ chạy trên server.
+    ///
+    /// Trước đây phần này nằm trong một [ClientRpc] tên SpawnPlayerClientRpc, mà
+    /// bên trong lại chặn "if (!IsHost) return;" rồi mới gọi SpawnAsPlayerObject.
+    /// Tức là: phát một lệnh đi khắp mọi máy, rồi bảo tất cả trừ host bỏ qua.
+    /// Logic ngược — gửi thừa cho mọi client, và che giấu việc spawn vốn dĩ là
+    /// việc riêng của server. Nay gọi thẳng trong ServerRpc.
+    /// </summary>
+    private void SpawnPlayerForClient(string selectedCharacter, ulong clientId)
     {
-        Debug.Log("Access SpawnPlayerClientRpc with ID: " + clientId);
-        if (playerPrefabs.Length == 0 || !IsHost)
+        if (!IsServer)
         {
-            Debug.LogError("Player prefabs array is empty or not Host");
+            return;
+        }
+
+        Debug.Log("SpawnPlayerForClient, ID: " + clientId);
+        if (playerPrefabs == null || playerPrefabs.Length < 4)
+        {
+            Debug.LogError("[PlayerManager] Mảng playerPrefabs phải có đủ 4 nhân vật.");
             return;
         }
 
